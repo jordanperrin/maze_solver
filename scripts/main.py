@@ -46,7 +46,7 @@ def main():
     plt.imshow(input, cmap='gray')
     plt.title("Maze Map")
     plt.axis("off")
-    plt.show() 
+    #plt.show() 
 
     print("Creating Maze...")
     t0 = time.time()
