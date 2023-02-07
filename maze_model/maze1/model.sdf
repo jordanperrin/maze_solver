@@ -1,6 +1,6 @@
 <?xml version='1.0'?>
 <sdf version='1.7'>
-  <model name='maze'>
+  <model name='maze1'>
     <link name='link_1'>
       <inertial>
         <mass>1</mass>

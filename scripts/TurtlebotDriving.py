@@ -1,4 +1,6 @@
 
+from multiprocessing.resource_sharer import stop
+from tabnanny import check
 import rospy
 import tf
 import matplotlib.pyplot as plt
@@ -17,9 +19,10 @@ class Pose2D():
 
 
 class TurtlebotDriving:
-    def __init__(self):
+    def __init__(self, robot):
         self.x_history = []
         self.y_history = []
+        self.robot = robot
 
         rospy.init_node('PythonControl')
 
@@ -28,9 +31,9 @@ class TurtlebotDriving:
         self.rate = rospy.Rate(10)
         self.kp = 1.6
        
-        self.cmd_vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1000)
-        rospy.Subscriber("odom", Odometry, self.odom_callback)
-        rospy.Subscriber("scan", LaserScan, self.scan_callback)
+        self.cmd_vel_pub = rospy.Publisher(f'/{robot}/cmd_vel', Twist, queue_size=1000)
+        rospy.Subscriber(f"/{robot}/odom", Odometry, self.odom_callback)
+        rospy.Subscriber(f"/{robot}/scan", LaserScan, self.scan_callback)
         rospy.sleep(2)
 
 # ---------------------------------------- Driving ----------------------------------------
@@ -38,7 +41,6 @@ class TurtlebotDriving:
 
     def turn(self, angle, speed = 0.7):
         """Rotate the turtlebot for a certain angle.
-
         Args:
             angle (float): Angle to turn in radian (+) for counterclockwise and (-) for clockwise turning
             speed (float): Angular velocity for the rotation
@@ -78,7 +80,6 @@ class TurtlebotDriving:
 
         self.wait(1)
 
-
     def rotateTo(self, angle, speed = 0.7):
         """Rotate the turtlebot to a desired angle.
 
@@ -111,10 +112,41 @@ class TurtlebotDriving:
         self.turn(direction * angle_to_turn, speed)
 
 
+    def reverse(self, distance= 0.3, speed = -0.2):
+        print("Moving backward "+str(distance)+"m ...")
+
+        msg = Twist()
+
+        # Robot's initial position
+        x_init = self.pose.x
+        y_init = self.pose.y
+
+        avoid_d = 0.5
+        travelled_distance = 0
+
+ 
+        # While not up to desired distance
+        while distance - travelled_distance > 0.005 and not rospy.is_shutdown():
+          
+            # Avoid obstacle on the front
+           
+            check_range = np.append(self.scan.ranges[:89],self.scan.ranges[-89:])
+            msg.linear.x = min(self.kp * abs(distance - travelled_distance) ,speed)
+            
+            # Calculate travelled distance
+            travelled_distance = math.sqrt((self.pose.x - x_init)**2 + (self.pose.y - y_init)**2)
+            self.cmd_vel_pub.publish(msg)
+
+            # print(travelled_distance)
+            self.rate.sleep()
+
+        self.stop()
+
+        self.wait(1)
+        
 
     def forward(self, distance, speed=0.3):
         """Move turtlebot forward for a certain distance.
-
         Args:
             distance (float): Distance to move the turtlebot forward (positive only)
             speed (float): Linear velocity for the movement
@@ -159,6 +191,7 @@ class TurtlebotDriving:
         self.wait(1)
 
 
+        
 
     def wait(self, duration):
         """Wait and stop for a specified duration.
@@ -185,6 +218,7 @@ class TurtlebotDriving:
             waypoint (tuple): x and y coordinate of the destination point
         
         """
+        
 
         difference = tuple(map(lambda i,j: i-j, waypoint, current))
         inc_x, inc_y = difference
@@ -197,7 +231,7 @@ class TurtlebotDriving:
             
 
     def stop(self):
-        """Stop the turtlebot from moving."""
+        print("Stop the turtlebot from moving.")
 
         msg = Twist()
         msg.linear.x = 0
@@ -231,21 +265,27 @@ class TurtlebotDriving:
 
 
 
-    def checkObstacle(self, degree=90, distance=0.4):
-        position = degree//2
+    def checkObstacle(self, distance , degree=90):
+        rate = rospy.Rate(10)
+        position = 31
+    
         check_range = np.append(self.scan.ranges[0:position], self.scan.ranges[-position:])
         check_range[check_range == 0] = np.inf
         if (check_range < distance).any():
             print("Obstacle found")
+            self.stop()
+            rate.sleep()
             return True
         return False
+       
 
     
-    def avoidObstacle(self, degree=90, distance=0.4):
+    def avoidObstacle(self,distance,angle, degree=90):
         rate = rospy.Rate(10)
         print("Avoiding obstacle")
-        position = degree//2
+        position = 31
 
+        #choosing what direction to turn into
         if np.sum(self.scan.ranges[0:position]) > np.sum(self.scan.ranges[-position:]):
             direction = 1
         else:
@@ -255,7 +295,7 @@ class TurtlebotDriving:
         check_range[check_range == 0] = np.inf
         has_obstacle = True
 
-        speed = 0.2
+        speed = 0.8
         twist = Twist()
         twist.angular.z = speed * direction
 
@@ -264,8 +304,42 @@ class TurtlebotDriving:
             check_range = np.append(self.scan.ranges[0:position], self.scan.ranges[-position:])
             check_range[check_range == 0] = np.inf
             if (check_range > distance).any():
+                print("TEST")
                 has_obstacle = False
+                twist.angular.z = 0;
             rate.sleep()
+
+        rate.sleep()
+        twist.angular.z = 0
+        self.cmd_vel_pub.publish(twist)
+        self.forward(0.599, 0, True)
+        rate.sleep()
+        
+        '''angle = angle % (2*math.pi)
+        #print("Rotating to "+str(angle)+"radian...")
+
+        direction = 1
+        angle_to_turn = abs(angle - self.pose.theta)
+
+        # Minimum turning angle
+        if angle_to_turn > math.pi:
+            angle_to_turn = 2*math.pi - angle_to_turn
+
+
+        # Determine turning direction
+        if angle != 3*math.pi/2:
+            if angle < self.pose.theta <= angle + 3.14:
+                direction = -1
+
+        else:
+            if self.pose.theta > angle or self.pose.theta < angle - math.pi:
+                direction = -1
+
+        check = True
+        speed = 0.7
+        # Turn for certain angle
+        self.turn(direction * angle_to_turn, speed , check)'''
+    
             
         print("No Obstacle detected in this direction")
 
