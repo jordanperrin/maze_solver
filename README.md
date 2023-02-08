@@ -1,6 +1,8 @@
 # Maze Solving in ROS
 Solving maze using several state-of-the-art (SOTA) maze-solving approaches: Breadth-first search, Depth-first search, Dijkstra's algorithm, A* search algorithm and Wall-follower algorithm. 
 
+I uploaded my work from my internship on: Feb 7, 2023.
+
 ## Environment
 
 - Ubuntu 20.04.2LTS 64bit
